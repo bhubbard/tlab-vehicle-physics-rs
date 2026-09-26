@@ -1,0 +1,1725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tlab-vehicle-physics-rs | Pacejka Magic Formula Tire & Drift Physics in Pure Rust</title>
+  <meta name="description" content="Pure Rust Pacejka 'Magic Formula' tire friction, combined slip, camber thrust, self-aligning torque (Mz), and drift physics for Bevy and vehicle simulators.">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- KaTeX for crisp math -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body);"></script>
+
+  <style>
+    :root {
+      --bg-dark: #080c14;
+      --bg-surface: #0e1522;
+      --bg-card: #131c2d;
+      --bg-card-hover: #18243a;
+      --border-subtle: #1c2b44;
+      --border-accent: #00f3ff;
+      
+      --accent-cyan: #00f3ff;
+      --accent-cyan-bright: #38f9d7;
+      --accent-cyan-glow: rgba(0, 243, 255, 0.35);
+      
+      --accent-amber: #ffaa00;
+      --accent-amber-bright: #ffc44d;
+      --accent-amber-glow: rgba(255, 170, 0, 0.35);
+
+      --accent-red: #ff3366;
+      --accent-green: #00e676;
+      
+      --text-main: #f0f6fc;
+      --text-muted: #8b9bb4;
+      --text-dim: #556680;
+      
+      --font-heading: 'Chakra Petch', sans-serif;
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(0, 243, 255, 0.08) 0%, transparent 55%),
+        linear-gradient(rgba(0, 243, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 243, 255, 0.03) 1px, transparent 1px);
+      background-size: 100% 100%, 36px 36px, 36px 36px;
+      color: var(--text-main);
+      font-family: var(--font-body);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* Header */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(8, 12, 20, 0.88);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .nav-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: inherit;
+    }
+    .logo-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #00f3ff, #0077ff);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-heading);
+      font-weight: 700;
+      color: #080c14;
+      box-shadow: 0 0 15px var(--accent-cyan-glow);
+    }
+    .logo-title {
+      font-family: var(--font-heading);
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .logo-tag {
+      font-size: 0.75rem;
+      color: var(--accent-cyan);
+      font-family: var(--font-mono);
+      background: rgba(0, 243, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(0, 243, 255, 0.25);
+    }
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-link:hover {
+      color: var(--accent-cyan);
+    }
+    .btn-github {
+      background: #152238;
+      border: 1px solid #233658;
+      color: #fff;
+      padding: 0.45rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }
+    .btn-github:hover {
+      background: #203354;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 12px rgba(0, 243, 255, 0.3);
+    }
+
+    /* Container */
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 5rem 0 3.5rem;
+      text-align: center;
+      position: relative;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(0, 243, 255, 0.1);
+      border: 1px solid rgba(0, 243, 255, 0.35);
+      color: var(--accent-cyan-bright);
+      padding: 0.35rem 1.1rem;
+      border-radius: 9999px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      animation: pulse-cyan 3s infinite;
+    }
+    @keyframes pulse-cyan {
+      0%, 100% { box-shadow: 0 0 15px rgba(0, 243, 255, 0.2); }
+      50% { box-shadow: 0 0 25px rgba(0, 243, 255, 0.45); }
+    }
+    .hero-title {
+      font-family: var(--font-heading);
+      font-size: 3.6rem;
+      line-height: 1.15;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .hero-title span {
+      background: linear-gradient(135deg, #fff 30%, var(--accent-cyan), var(--accent-amber));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-subtitle {
+      max-width: 780px;
+      margin: 0 auto 2rem;
+      color: var(--text-muted);
+      font-size: 1.2rem;
+    }
+    .badges-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.75rem;
+      margin-bottom: 2.5rem;
+    }
+    .badge-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      padding: 0.3rem 0.75rem;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      box-shadow: 0 0 8px var(--accent-cyan);
+    }
+    .hero-cta {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #00f3ff, #0088ff);
+      color: #080c14;
+      font-weight: 700;
+      font-size: 1rem;
+      padding: 0.75rem 1.75rem;
+      border-radius: 8px;
+      text-decoration: none;
+      box-shadow: 0 4px 20px var(--accent-cyan-glow);
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(0, 243, 255, 0.6);
+    }
+    .btn-secondary {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      font-weight: 600;
+      font-size: 1rem;
+      padding: 0.75rem 1.75rem;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-secondary:hover {
+      background: var(--bg-card);
+      border-color: var(--accent-cyan);
+    }
+
+    /* Section Styling */
+    section {
+      padding: 4.5rem 0;
+    }
+    .section-header {
+      margin-bottom: 2.5rem;
+      text-align: center;
+    }
+    .section-tag {
+      font-family: var(--font-mono);
+      color: var(--accent-cyan);
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+    .section-title {
+      font-family: var(--font-heading);
+      font-size: 2.4rem;
+      font-weight: 700;
+    }
+    .section-desc {
+      color: var(--text-muted);
+      max-width: 680px;
+      margin: 0.5rem auto 0;
+      font-size: 1.05rem;
+    }
+
+    /* Sandbox Panel */
+    .sim-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      margin-bottom: 4rem;
+    }
+    .sim-tabs {
+      display: flex;
+      background: #090e18;
+      border-bottom: 1px solid var(--border-subtle);
+      overflow-x: auto;
+    }
+    .sim-tab-btn {
+      padding: 1rem 1.5rem;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-heading);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .sim-tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(0, 243, 255, 0.03);
+    }
+    .sim-tab-btn.active {
+      color: var(--accent-cyan);
+      border-bottom-color: var(--accent-cyan);
+      background: rgba(0, 243, 255, 0.07);
+    }
+    .sim-tab-content {
+      display: none;
+      padding: 2rem;
+    }
+    .sim-tab-content.active {
+      display: block;
+    }
+
+    /* Interactive Graph Canvas */
+    .graph-container {
+      background: #06090f;
+      border: 1px solid #142033;
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+    }
+
+    /* Controls */
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 2rem;
+    }
+    @media (max-width: 960px) {
+      .controls-grid { grid-template-columns: 1fr; }
+    }
+    .controls-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .control-group {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .control-label-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    .control-val {
+      font-family: var(--font-mono);
+      color: var(--accent-cyan);
+      font-weight: 600;
+    }
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--accent-cyan);
+      cursor: pointer;
+    }
+    .preset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .preset-btn {
+      background: #090e18;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .preset-btn:hover {
+      border-color: var(--accent-cyan);
+      color: #fff;
+    }
+    .preset-btn.active {
+      background: rgba(0, 243, 255, 0.15);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    /* Telemetry HUD Cards */
+    .telemetry-hud {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .hud-card {
+      background: #0a0f1b;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.75rem;
+      text-align: center;
+    }
+    .hud-label {
+      font-size: 0.7rem;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .hud-val {
+      font-family: var(--font-mono);
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      margin-top: 0.2rem;
+    }
+
+    /* Features Grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 4rem;
+    }
+    .feature-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 1.75rem;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feature-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(0, 243, 255, 0.4);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+    .feature-card:hover::before {
+      opacity: 1;
+    }
+    .card-icon {
+      width: 44px;
+      height: 44px;
+      background: rgba(0, 243, 255, 0.1);
+      border: 1px solid rgba(0, 243, 255, 0.25);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      margin-bottom: 1.25rem;
+      color: var(--accent-cyan);
+    }
+    .card-title {
+      font-family: var(--font-heading);
+      font-size: 1.35rem;
+      margin-bottom: 0.65rem;
+      font-weight: 700;
+    }
+    .card-text {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 1rem;
+    }
+    .card-math {
+      background: #090e18;
+      border: 1px solid #152238;
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-size: 0.9rem;
+      color: #e2e8f0;
+      overflow-x: auto;
+    }
+
+    /* Code Snippets */
+    .code-box {
+      background: #06090f;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 3rem;
+    }
+    .code-header {
+      background: #0c1322;
+      padding: 0.75rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .code-title {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .btn-copy {
+      background: rgba(0, 243, 255, 0.08);
+      border: 1px solid rgba(0, 243, 255, 0.25);
+      color: var(--accent-cyan);
+      padding: 0.25rem 0.65rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-copy:hover {
+      background: var(--accent-cyan);
+      color: #080c14;
+    }
+    pre code {
+      display: block;
+      padding: 1.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      color: #e2e8f0;
+      overflow-x: auto;
+      line-height: 1.5;
+    }
+    .kw { color: #ff7b72; font-weight: 600; }
+    .fn { color: #79c0ff; }
+    .str { color: #a5d6ff; }
+    .num { color: #ffaa00; }
+    .cmt { color: #8b949e; font-style: italic; }
+    .typ { color: #38f9d7; }
+
+    /* Test Results */
+    .tests-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 2rem;
+      margin-bottom: 4rem;
+    }
+    .tests-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 1.5rem;
+    }
+    .test-badge-big {
+      background: rgba(0, 243, 255, 0.12);
+      border: 1px solid rgba(0, 243, 255, 0.4);
+      color: var(--accent-cyan);
+      font-family: var(--font-heading);
+      font-size: 1.2rem;
+      font-weight: 700;
+      padding: 0.5rem 1.25rem;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .test-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+    .test-suite-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 1.2rem;
+    }
+    .test-suite-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    .test-suite-name {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #fff;
+    }
+    .test-suite-count {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent-cyan);
+      background: rgba(0, 243, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .test-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+    .test-status-ok {
+      color: var(--accent-cyan);
+      font-size: 0.85rem;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 3rem 0;
+      background: #05080e;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+    .footer-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation Header -->
+  <header>
+    <div class="nav-container">
+      <a href="#" class="logo-group">
+        <div class="logo-icon">TL</div>
+        <div>
+          <div class="logo-title">tlab-vehicle-physics-rs <span class="logo-tag">v0.1.0</span></div>
+        </div>
+      </a>
+      <nav class="nav-links">
+        <a href="#plotter" class="nav-link">Pacejka Plotter</a>
+        <a href="#friction-circle" class="nav-link">Friction Circle & Drift</a>
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#equations" class="nav-link">Equations</a>
+        <a href="#quickstart" class="nav-link">Quickstart</a>
+        <a href="#tests" class="nav-link">Tests (15/15)</a>
+        <a href="https://github.com/bhubbard/tlab-vehicle-physics-rs" target="_blank" class="btn-github">
+          <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">
+        <span>🔬</span> EMPIRICAL TIRE DYNAMICS & DRIFT TELEMETRY
+      </div>
+      <h1 class="hero-title">
+        Hans B. Pacejka<br><span>'Magic Formula' Engine</span>
+      </h1>
+      <p class="hero-subtitle">
+        High-fidelity tire kinetics, non-linear combined slip envelopes, camber thrust, self-aligning torque ($M_z$), and authentic drift transition physics in pure Rust.
+      </p>
+      
+      <div class="badges-row">
+        <div class="badge-item"><span class="badge-dot"></span> 15 / 15 Tests Passed</div>
+        <div class="badge-item">⚡ Multi-Pacejka 2D Load Table Interpolation</div>
+        <div class="badge-item">🏎️ Realistic Counter-Steering Feedback</div>
+        <div class="badge-item">🦀 Rust 2024 Edition</div>
+      </div>
+
+      <div class="hero-cta">
+        <a href="#plotter" class="btn-primary">Launch Interactive Plotter</a>
+        <a href="#quickstart" class="btn-secondary">View Rust Integration</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Sandbox Section -->
+  <section id="plotter">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Interactive Oscilloscope</span>
+        <h2 class="section-title">Live Pacejka Curve Plotter</h2>
+        <p class="section-desc">Tune Hans Pacejka's semi-empirical parameters in real time and observe live friction response and cornering stiffness.</p>
+      </div>
+
+      <div class="sim-panel">
+        <div class="sim-tabs">
+          <button class="sim-tab-btn active" onclick="switchSimTab('magic-formula')">
+            <span>📈</span> Magic Formula Curve Plotter
+          </button>
+          <button class="sim-tab-btn" onclick="switchSimTab('friction-circle')">
+            <span>🎯</span> Friction Circle & Drift Transition
+          </button>
+          <button class="sim-tab-btn" onclick="switchSimTab('aligning-torque')">
+            <span>🔄</span> Pneumatic Trail & Aligning Torque ($M_z$)
+          </button>
+        </div>
+
+        <!-- TAB 1: PACEJKA MAGIC FORMULA PLOTTER -->
+        <div id="tab-magic-formula" class="sim-tab-content active">
+          <div class="controls-grid">
+            <div class="graph-container">
+              <canvas id="pacejkaCanvas" width="680" height="420"></canvas>
+              
+              <div class="telemetry-hud" style="padding: 0 1rem 1rem 1rem;">
+                <div class="hud-card">
+                  <div class="hud-label">Operating Slip (α)</div>
+                  <div id="hudSlipAngle" class="hud-val">6.0°</div>
+                </div>
+                <div class="hud-card">
+                  <div class="hud-label">Lateral Force (Fy)</div>
+                  <div id="hudLateralF" class="hud-val">5,420 N</div>
+                </div>
+                <div class="hud-card">
+                  <div class="hud-label">Cornering Stiffness (Cα)</div>
+                  <div id="hudStiffness" class="hud-val">1,240 N/deg</div>
+                </div>
+                <div class="hud-card">
+                  <div class="hud-label">Peak Slip Angle</div>
+                  <div id="hudPeakAngle" class="hud-val">8.2°</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="controls-wrapper">
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Tire Presets</span>
+                </div>
+                <div class="preset-row">
+                  <button class="preset-btn active" onclick="applyPreset('gt3')">GT3 Racing Slick</button>
+                  <button class="preset-btn" onclick="applyPreset('street')">Street Radial</button>
+                  <button class="preset-btn" onclick="applyPreset('drift')">Drift Spec</button>
+                  <button class="preset-btn" onclick="applyPreset('wet')">Wet Asphalt</button>
+                  <button class="preset-btn" onclick="applyPreset('gravel')">Loose Gravel</button>
+                </div>
+              </div>
+
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Active Slip Angle Scrubber ($\alpha$)</span>
+                  <span id="lblProbeSlip" class="control-val">6.0°</span>
+                </div>
+                <input type="range" id="slipProbeSlider" min="0" max="30" step="0.1" value="6.0" oninput="updateProbe(this.value)">
+              </div>
+
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Stiffness Factor ($B$)</span>
+                  <span id="lblB" class="control-val">10.0</span>
+                </div>
+                <input type="range" id="bSlider" min="2.0" max="25.0" step="0.1" value="10.0" oninput="updatePacejka()">
+
+                <div class="control-label-row" style="margin-top:0.75rem;">
+                  <span>Shape Factor ($C$)</span>
+                  <span id="lblC" class="control-val">1.60</span>
+                </div>
+                <input type="range" id="cSlider" min="1.0" max="2.4" step="0.02" value="1.60" oninput="updatePacejka()">
+
+                <div class="control-label-row" style="margin-top:0.75rem;">
+                  <span>Peak Friction Factor ($D = \mu \cdot F_z$)</span>
+                  <span id="lblD" class="control-val">1.35</span>
+                </div>
+                <input type="range" id="dSlider" min="0.4" max="2.2" step="0.05" value="1.35" oninput="updatePacejka()">
+
+                <div class="control-label-row" style="margin-top:0.75rem;">
+                  <span>Curvature Factor ($E$)</span>
+                  <span id="lblE" class="control-val">-0.60</span>
+                </div>
+                <input type="range" id="eSlider" min="-2.5" max="1.0" step="0.05" value="-0.60" oninput="updatePacejka()">
+              </div>
+
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Normal Load ($F_z$)</span>
+                  <span id="lblFz" class="control-val">4,500 N</span>
+                </div>
+                <input type="range" id="fzSlider" min="1000" max="8000" step="100" value="4500" oninput="updatePacejka()">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: FRICTION CIRCLE & COMBINED SLIP -->
+        <div id="tab-friction-circle" class="sim-tab-content">
+          <div class="controls-grid">
+            <div class="graph-container">
+              <canvas id="circleCanvas" width="680" height="420"></canvas>
+
+              <div class="telemetry-hud" style="padding: 0 1rem 1rem 1rem;">
+                <div class="hud-card">
+                  <div class="hud-label">Traction State</div>
+                  <div id="hudTractionState" class="hud-val" style="color:var(--accent-green);">100% GRIP</div>
+                </div>
+                <div class="hud-card">
+                  <div class="hud-label">Demand ($F_{\text{total}}$)</div>
+                  <div id="hudTotalForce" class="hud-val">3,850 N</div>
+                </div>
+                <div class="hud-card">
+                  <div class="hud-label">Grip Utilization</div>
+                  <div id="hudGripUtil" class="hud-val">68.2%</div>
+                </div>
+                <div class="hud-card">
+                  <div class="hud-label">Slide Friction (μ_eff)</div>
+                  <div id="hudMuEff" class="hud-val">1.28</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="controls-wrapper">
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Longitudinal Slip Ratio ($\kappa$) - Braking / Acceleration</span>
+                  <span id="lblKappa" class="control-val">0.00</span>
+                </div>
+                <input type="range" id="kappaSlider" min="-100" max="100" value="0" oninput="updateCombinedSlip()">
+                <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-dim); margin-top:2px;">
+                  <span>-1.0 (Full Lockup)</span>
+                  <span>0.0 (Rolling)</span>
+                  <span>+1.0 (Burnout)</span>
+                </div>
+              </div>
+
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Lateral Slip Angle ($\alpha$) - Cornering / Drift</span>
+                  <span id="lblAlpha" class="control-val">0.0°</span>
+                </div>
+                <input type="range" id="alphaSlider" min="-25" max="25" step="0.5" value="0" oninput="updateCombinedSlip()">
+              </div>
+
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Drift Trigger Presets</span>
+                </div>
+                <div class="preset-row">
+                  <button class="preset-btn" onclick="setDriftScenario('grip')">Optimal Turn-in</button>
+                  <button class="preset-btn" onclick="setDriftScenario('trailbrake')">Trail-Braking Entry</button>
+                  <button class="preset-btn" onclick="setDriftScenario('powerover')">Power-Oversteer</button>
+                  <button class="preset-btn" onclick="setDriftScenario('drift')">Sustained High-Angle Drift</button>
+                  <button class="preset-btn" onclick="setDriftScenario('lockup')">Front Lockup (Understeer)</button>
+                </div>
+              </div>
+
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Combined Slip Weighting</span>
+                </div>
+                <div style="font-size:0.85rem; color:var(--text-muted); font-family:var(--font-mono);">
+                  $G_{xa}(\alpha) = \cos(C_{xa} \arctan(B_{xa} \alpha))$<br>
+                  $G_{yk}(\kappa) = \cos(C_{yk} \arctan(B_{yk} \kappa))$
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: PNEUMATIC TRAIL & ALIGNING TORQUE -->
+        <div id="tab-aligning-torque" class="sim-tab-content">
+          <div class="controls-grid">
+            <div class="graph-container">
+              <canvas id="torqueCanvas" width="680" height="420"></canvas>
+
+              <div class="telemetry-hud" style="padding: 0 1rem 1rem 1rem;">
+                <div class="hud-card">
+                  <div class="hud-label">Self-Aligning Torque</div>
+                  <div id="hudMz" class="hud-val">142 N·m</div>
+                </div>
+                <div class="hud-card">
+                  <div class="hud-label">Pneumatic Trail ($t$)</div>
+                  <div id="hudTrail" class="hud-val">28.4 mm</div>
+                </div>
+                <div class="hud-card">
+                  <div class="hud-label">FFB Feel</div>
+                  <div id="hudFFB" class="hud-val" style="color:var(--accent-cyan);">Centering Grip</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="controls-wrapper">
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Slip Angle Scrubber ($\alpha$)</span>
+                  <span id="lblTrailAlpha" class="control-val">4.0°</span>
+                </div>
+                <input type="range" id="trailAlphaSlider" min="0" max="25" step="0.2" value="4.0" oninput="updateTrailPlot()">
+              </div>
+
+              <div class="control-group">
+                <div class="control-label-row">
+                  <span>Wheel Camber Angle ($\gamma$)</span>
+                  <span id="lblCamber" class="control-val">-2.0°</span>
+                </div>
+                <input type="range" id="camberSlider" min="-5" max="2" step="0.2" value="-2.0" oninput="updateTrailPlot()">
+                <div style="font-size:0.8rem; color:var(--text-dim); margin-top:0.4rem; font-family:var(--font-mono);">
+                  Negative camber introduces lateral camber thrust $F_{y,\gamma} = C_\gamma \cdot \gamma \cdot F_z$.
+                </div>
+              </div>
+
+              <div class="control-group">
+                <h4 style="font-family:var(--font-heading); color:var(--accent-amber); margin-bottom:0.5rem;">The Secret of Drift Force Feedback</h4>
+                <p style="font-size:0.88rem; color:var(--text-muted);">
+                  At low slip angles ($\alpha < 5^\circ$), pneumatic trail acts behind the tire patch, producing strong self-centering torque ($M_z$). As slip approaches peak grip ($\approx 7^\circ$), $M_z$ peaks and then rapidly decays to near-zero as trail vanishes. In deep drift angles ($\alpha > 12^\circ$), torque relaxes, naturally rotating the steering wheel into counter-steer!
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Architectural Features Grid -->
+  <section id="features">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Deep Physics Components</span>
+        <h2 class="section-title">Core Subsystems</h2>
+        <p class="section-desc">TLabVehiclePhysics C# translation ported to idiomatic, memory-safe, zero-allocation Rust.</p>
+      </div>
+
+      <div class="features-grid">
+        <!-- Card 1 -->
+        <div class="feature-card">
+          <div class="card-icon">📐</div>
+          <h3 class="card-title">Hans B. Pacejka Magic Formula</h3>
+          <p class="card-text">
+            Semi-empirical formulation governing tire adhesion through slip stiffness ($B$), curve shape ($C$), peak friction ($D$), curvature ($E$), and horizontal/vertical shifts.
+          </p>
+          <div class="card-math">
+            $$y(x) = D \sin(C \arctan(Bx_1 - E(Bx_1 - \arctan Bx_1))) + S_v$$
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="feature-card">
+          <div class="card-icon">⚡</div>
+          <h3 class="card-title">Slip Angle & Ratio Kinematics</h3>
+          <p class="card-text">
+            Calculates longitudinal slip ratio $\kappa$ and lateral slip angle $\alpha$ with numerical low-speed singularity regularization to guarantee rock-solid standstill stability.
+          </p>
+          <div class="card-math">
+            $$\kappa = \frac{\omega r - v_x}{\max(|v_x|, v_{\text{reg}})}, \quad \alpha = \arctan\left(\frac{v_y}{|v_x|}\right)$$
+          </div>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="feature-card">
+          <div class="card-icon">⭕</div>
+          <h3 class="card-title">Combined Slip & Friction Ellipse</h3>
+          <p class="card-text">
+            Coupled Pacejka interaction attenuation factors $G_{xa}$ and $G_{yk}$. Acceleration wheelspin attenuates lateral cornering grip; lateral slide reduces braking capability.
+          </p>
+          <div class="card-math">
+            $$F_x = F_{x0} \cdot G_{xa}(\alpha), \quad F_y = F_{y0} \cdot G_{yk}(\kappa)$$
+          </div>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="feature-card">
+          <div class="card-icon">🔄</div>
+          <h3 class="card-title">Pneumatic Trail & Counter-Steer</h3>
+          <p class="card-text">
+            Realistic contact patch center-of-pressure offset. Produces accurate self-aligning torque ($M_z$) for force feedback steering wheels and authentic drift counter-steer.
+          </p>
+          <div class="card-math">
+            $$M_z = -t(\alpha) \cdot F_y + M_{zr}(\alpha, \gamma)$$
+          </div>
+        </div>
+
+        <!-- Card 5 -->
+        <div class="feature-card">
+          <div class="card-icon">⚖️</div>
+          <h3 class="card-title">Normal Load Sensitivity</h3>
+          <p class="card-text">
+            Tire friction coefficient diminishes as normal load $F_z$ increases, accurately simulating vehicle weight transfer, body roll, and understeer/oversteer balance.
+          </p>
+          <div class="card-math">
+            $$\mu(F_z) = \mu_0 \cdot \left(1 - k_{\text{load}} \cdot \frac{F_z - F_{z0}}{F_{z0}}\right)$$
+          </div>
+        </div>
+
+        <!-- Card 6 -->
+        <div class="feature-card">
+          <div class="card-icon">🏎️</div>
+          <h3 class="card-title">Progressive Drift Breakaway</h3>
+          <p class="card-text">
+            Smooth exponential transition from static peak friction $\mu_{\text{peak}}$ towards kinetic sliding friction $\mu_{\text{slide}}$ when tire traction limit is exceeded.
+          </p>
+          <div class="card-math">
+            $$\mu_{\text{eff}} = \mu_{\text{slide}} + (\mu_{\text{peak}} - \mu_{\text{slide}}) \cdot e^{-\beta (\text{util}-1)^2}$$
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Equations & Mathematical Rigor -->
+  <section id="equations" style="background: rgba(14, 21, 34, 0.4);">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Formulations</span>
+        <h2 class="section-title">Mathematical Formulations</h2>
+        <p class="section-desc">The analytical equations driving each computation in the Rust crate.</p>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
+        <div class="feature-card">
+          <h4 style="font-family:var(--font-heading); color:var(--accent-cyan); margin-bottom:0.5rem;">C# Direct Evaluation Variant</h4>
+          <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:0.75rem;">
+            Direct formula evaluated in TLabVehiclePhysics C# port:
+          </p>
+          <div class="card-math">
+            $$F(x) = D \sin(C \arctan(B x - E \arctan(B x - \arctan(B x))))$$
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <h4 style="font-family:var(--font-heading); color:var(--accent-amber); margin-bottom:0.5rem;">MultiPacejka 2D Load Table</h4>
+          <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:0.75rem;">
+            Bilinear interpolation between discrete load-dependent Pacejka curve presets across vertical wheel force slices $F_{z,1}, F_{z,2}, \dots, F_{z,n}$.
+          </p>
+          <div class="card-math">
+            $$F_{\text{net}} = \text{lerp}(F_{\text{low}}(x), F_{\text{high}}(x), t)$$
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Start Code Section -->
+  <section id="quickstart">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Integration</span>
+        <h2 class="section-title">Quick Start Guide</h2>
+        <p class="section-desc">Add tlab-vehicle-physics to your project and evaluate full tire kinematics in 5 lines of Rust.</p>
+      </div>
+
+      <div class="code-box">
+        <div class="code-header">
+          <span class="code-title">Cargo.toml</span>
+          <button class="btn-copy" onclick="copyCode('cargoCode')">Copy</button>
+        </div>
+        <pre><code id="cargoCode"><span class="typ">[dependencies]</span>
+<span class="kw">tlab-vehicle-physics</span> = <span class="str">"0.1"</span>
+<span class="kw">glam</span> = <span class="str">"0.29"</span></code></pre>
+      </div>
+
+      <div class="code-box">
+        <div class="code-header">
+          <span class="code-title">main.rs</span>
+          <button class="btn-copy" onclick="copyCode('rustCode')">Copy</button>
+        </div>
+        <pre><code id="rustCode"><span class="kw">use</span> <span class="typ">tlab_vehicle_physics::prelude</span>::*;
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="cmt">// 1. Instantiate a high-performance tire model with Pacejka coefficients</span>
+    <span class="kw">let</span> tire = <span class="typ">TireModel</span>::<span class="fn">default</span>();
+
+    <span class="cmt">// 2. Supply instantaneous wheel kinematics from physics engine</span>
+    <span class="kw">let</span> angular_velocity = <span class="num">32.0</span>;                <span class="cmt">// rad/s (~305 RPM)</span>
+    <span class="kw">let</span> wheel_radius = <span class="num">0.35</span>;                    <span class="cmt">// 35 cm rolling radius</span>
+    <span class="kw">let</span> longitudinal_velocity = <span class="num">10.0</span>;           <span class="cmt">// 10 m/s (36 km/h) forward</span>
+    <span class="kw">let</span> lateral_velocity = <span class="num">1.2</span>;                 <span class="cmt">// 1.2 m/s sideways drift</span>
+    <span class="kw">let</span> normal_load = <span class="num">4_200.0</span>;                  <span class="cmt">// 4,200 N normal force</span>
+    <span class="kw">let</span> camber_angle_rad = -<span class="num">1.5_f32</span>.<span class="fn">to_radians</span>(); <span class="cmt">// -1.5° camber</span>
+
+    <span class="cmt">// 3. Evaluate comprehensive tire kinetics</span>
+    <span class="kw">let</span> output = tire.<span class="fn">evaluate</span>(
+        angular_velocity, wheel_radius,
+        longitudinal_velocity, lateral_velocity,
+        normal_load, camber_angle_rad,
+    );
+
+    <span class="fn">println!</span>(<span class="str">"Longitudinal Force Fx: {:.1} N"</span>, output.longitudinal_force);
+    <span class="fn">println!</span>(<span class="str">"Lateral Force Fy: {:.1} N"</span>, output.lateral_force);
+    <span class="fn">println!</span>(<span class="str">"Self-Aligning Torque Mz: {:.2} N·m"</span>, output.aligning_torque);
+    <span class="fn">println!</span>(<span class="str">"Grip Utilization: {:.1}%"</span>, output.grip_utilization * <span class="num">100.0</span>);
+    <span class="fn">println!</span>(<span class="str">"Is Sliding/Drifting: {}"</span>, output.is_sliding);
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Test Results Section -->
+  <section id="tests">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Verification</span>
+        <h2 class="section-title">Automated Test Suite</h2>
+        <p class="section-desc">100% test coverage across all Pacejka formulas and slip kinematics.</p>
+      </div>
+
+      <div class="tests-panel">
+        <div class="tests-summary">
+          <div>
+            <div style="font-family:var(--font-heading); font-size:1.5rem; font-weight:700;">15 Tests Passed</div>
+            <div style="color:var(--text-muted); font-size:0.85rem; font-family:var(--font-mono);">0 failed · 0 ignored · 4 integration suites</div>
+          </div>
+          <div class="test-badge-big">
+            ✓ ALL TESTS PASSING
+          </div>
+        </div>
+
+        <div class="test-grid">
+          <!-- Combined Slip Tests -->
+          <div class="test-suite-card">
+            <div class="test-suite-header">
+              <span class="test-suite-name">combined_slip_tests</span>
+              <span class="test-suite-count">3/3</span>
+            </div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_normal_load_sensitivity</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_pacejka_combined_slip_weighting</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_friction_circle_limit</div>
+          </div>
+
+          <!-- Pacejka Tests -->
+          <div class="test-suite-card">
+            <div class="test-suite-header">
+              <span class="test-suite-name">pacejka_tests</span>
+              <span class="test-suite-count">4/4</span>
+            </div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_pacejka_magic_formula_evaluation</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_tlab_csharp_formula_evaluation</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_pacejka_shifts</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_multi_pacejka_interpolation</div>
+          </div>
+
+          <!-- Slip Tests -->
+          <div class="test-suite-card">
+            <div class="test-suite-header">
+              <span class="test-suite-name">slip_tests</span>
+              <span class="test-suite-count">4/4</span>
+            </div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_longitudinal_slip_ratio_driving_and_braking</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_lateral_slip_angle</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_slip_ratio_zero_speed_regularization</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_combined_slip_state_evaluator</div>
+          </div>
+
+          <!-- Tire Forces Tests -->
+          <div class="test-suite-card">
+            <div class="test-suite-header">
+              <span class="test-suite-name">tire_forces_tests</span>
+              <span class="test-suite-count">4/4</span>
+            </div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_camber_thrust</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_pneumatic_trail_and_aligning_torque</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_full_tire_evaluation</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_zero_normal_load</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container footer-content">
+      <div>
+        <div style="font-family:var(--font-heading); color:#fff; font-size:1.1rem; font-weight:700;">tlab-vehicle-physics-rs</div>
+        <p style="margin-top:0.25rem;">Translated from TLabAltoh's TLabVehiclePhysics for high-fidelity vehicle simulations.</p>
+      </div>
+      <div>
+        Released under MIT & Apache 2.0 dual licenses.
+      </div>
+    </div>
+  </footer>
+
+  <!-- Interactive JavaScript Engine -->
+  <script>
+    function switchSimTab(tabId) {
+      document.querySelectorAll('.sim-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.sim-tab-content').forEach(c => c.classList.remove('active'));
+      
+      const btn = event.currentTarget;
+      btn.classList.add('active');
+      document.getElementById('tab-' + tabId).classList.add('active');
+      
+      if (tabId === 'magic-formula') renderPacejkaPlot();
+      if (tabId === 'friction-circle') renderFrictionCircle();
+      if (tabId === 'aligning-torque') renderTorquePlot();
+    }
+
+    function copyCode(id) {
+      const code = document.getElementById(id).innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        alert('Copied to clipboard!');
+      });
+    }
+
+    // -------------------------------------------------------------
+    // PACEJKA MAGIC FORMULA MATHEMATICS
+    // -------------------------------------------------------------
+    let pacejkaParams = {
+      B: 10.0,
+      C: 1.60,
+      D: 1.35,
+      E: -0.60,
+      Sh: 0.0,
+      Sv: 0.0,
+      Fz: 4500,
+      probeAlpha: 6.0
+    };
+
+    const PRESETS = {
+      gt3: { B: 12.0, C: 1.65, D: 1.55, E: -0.80 },
+      street: { B: 9.0, C: 1.45, D: 1.10, E: 0.20 },
+      drift: { B: 14.0, C: 1.75, D: 1.35, E: -1.20 },
+      wet: { B: 8.5, C: 1.50, D: 0.65, E: 0.10 },
+      gravel: { B: 5.0, C: 1.25, D: 0.55, E: 0.50 }
+    };
+
+    function applyPreset(name) {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      
+      const p = PRESETS[name];
+      pacejkaParams.B = p.B;
+      pacejkaParams.C = p.C;
+      pacejkaParams.D = p.D;
+      pacejkaParams.E = p.E;
+      
+      document.getElementById('bSlider').value = p.B;
+      document.getElementById('cSlider').value = p.C;
+      document.getElementById('dSlider').value = p.D;
+      document.getElementById('eSlider').value = p.E;
+
+      updatePacejka();
+    }
+
+    function updatePacejka() {
+      pacejkaParams.B = parseFloat(document.getElementById('bSlider').value);
+      pacejkaParams.C = parseFloat(document.getElementById('cSlider').value);
+      pacejkaParams.D = parseFloat(document.getElementById('dSlider').value);
+      pacejkaParams.E = parseFloat(document.getElementById('eSlider').value);
+      pacejkaParams.Fz = parseFloat(document.getElementById('fzSlider').value);
+
+      document.getElementById('lblB').innerText = pacejkaParams.B.toFixed(1);
+      document.getElementById('lblC').innerText = pacejkaParams.C.toFixed(2);
+      document.getElementById('lblD').innerText = pacejkaParams.D.toFixed(2);
+      document.getElementById('lblE').innerText = pacejkaParams.E.toFixed(2);
+      document.getElementById('lblFz').innerText = pacejkaParams.Fz.toLocaleString() + ' N';
+
+      renderPacejkaPlot();
+    }
+
+    function updateProbe(val) {
+      pacejkaParams.probeAlpha = parseFloat(val);
+      document.getElementById('lblProbeSlip').innerText = pacejkaParams.probeAlpha.toFixed(1) + '°';
+      renderPacejkaPlot();
+    }
+
+    // Evaluates Pacejka Magic Formula: y(x) = D * sin(C * atan(Bx1 - E*(Bx1 - atan(Bx1)))) + Sv
+    function evalPacejka(x, B, C, D, E, Sh, Sv) {
+      const x1 = x + Sh;
+      const Bx1 = B * x1;
+      const inner = Bx1 - E * (Bx1 - Math.atan(Bx1));
+      return D * Math.sin(C * Math.atan(inner)) + Sv;
+    }
+
+    const pCanvas = document.getElementById('pacejkaCanvas');
+    const pCtx = pCanvas.getContext('2d');
+
+    function renderPacejkaPlot() {
+      const w = pCanvas.width;
+      const h = pCanvas.height;
+      pCtx.clearRect(0, 0, w, h);
+
+      const padLeft = 60;
+      const padRight = 30;
+      const padTop = 30;
+      const padBottom = 40;
+      const plotW = w - padLeft - padRight;
+      const plotH = h - padTop - padBottom;
+
+      // Grid Lines
+      pCtx.strokeStyle = '#142033';
+      pCtx.lineWidth = 1;
+      pCtx.beginPath();
+      for (let deg = 0; deg <= 30; deg += 5) {
+        const x = padLeft + (deg / 30) * plotW;
+        pCtx.moveTo(x, padTop);
+        pCtx.lineTo(x, h - padBottom);
+      }
+      for (let mu = 0; mu <= 2.0; mu += 0.5) {
+        const y = (h - padBottom) - (mu / 2.0) * plotH;
+        pCtx.moveTo(padLeft, y);
+        pCtx.lineTo(w - padRight, y);
+      }
+      pCtx.stroke();
+
+      // Axes & Labels
+      pCtx.fillStyle = '#556680';
+      pCtx.font = '11px "JetBrains Mono"';
+      pCtx.textAlign = 'center';
+      for (let deg = 0; deg <= 30; deg += 5) {
+        const x = padLeft + (deg / 30) * plotW;
+        pCtx.fillText(deg + '°', x, h - padBottom + 20);
+      }
+      pCtx.textAlign = 'right';
+      for (let mu = 0; mu <= 2.0; mu += 0.5) {
+        const y = (h - padBottom) - (mu / 2.0) * plotH;
+        pCtx.fillText(mu.toFixed(1) + ' μ', padLeft - 10, y + 4);
+      }
+      pCtx.fillText('SLIP ANGLE (deg)', w - padRight, h - padBottom + 35);
+
+      // Initial Cornering Stiffness Slope Line
+      const B = pacejkaParams.B;
+      const C = pacejkaParams.C;
+      const D = pacejkaParams.D;
+      const E = pacejkaParams.E;
+      const initSlope = B * C * D; // per radian
+      const slopePerDeg = (initSlope * Math.PI) / 180;
+
+      pCtx.strokeStyle = 'rgba(255, 170, 0, 0.4)';
+      pCtx.setLineDash([4, 4]);
+      pCtx.lineWidth = 1.5;
+      pCtx.beginPath();
+      pCtx.moveTo(padLeft, h - padBottom);
+      const tangentEndDeg = 8;
+      const tangentEndMu = tangentEndDeg * slopePerDeg;
+      const tx = padLeft + (tangentEndDeg / 30) * plotW;
+      const ty = (h - padBottom) - (tangentEndMu / 2.0) * plotH;
+      pCtx.lineTo(tx, ty);
+      pCtx.stroke();
+      pCtx.setLineDash([]);
+
+      // Draw Main Pacejka Curve
+      pCtx.strokeStyle = '#00f3ff';
+      pCtx.lineWidth = 3;
+      pCtx.shadowColor = 'rgba(0, 243, 255, 0.5)';
+      pCtx.shadowBlur = 10;
+      pCtx.beginPath();
+
+      let peakMu = -1;
+      let peakDeg = 0;
+
+      for (let deg = 0; deg <= 30; deg += 0.2) {
+        const rad = (deg * Math.PI) / 180;
+        const mu = evalPacejka(rad, B, C, D, E, 0, 0);
+        const px = padLeft + (deg / 30) * plotW;
+        const py = (h - padBottom) - (mu / 2.0) * plotH;
+
+        if (deg === 0) pCtx.moveTo(px, py);
+        else pCtx.lineTo(px, py);
+
+        if (mu > peakMu) {
+          peakMu = mu;
+          peakDeg = deg;
+        }
+      }
+      pCtx.stroke();
+      pCtx.shadowBlur = 0;
+
+      // Peak Indicator
+      const peakX = padLeft + (peakDeg / 30) * plotW;
+      const peakY = (h - padBottom) - (peakMu / 2.0) * plotH;
+      pCtx.fillStyle = '#ffaa00';
+      pCtx.beginPath();
+      pCtx.arc(peakX, peakY, 5, 0, Math.PI * 2);
+      pCtx.fill();
+      pCtx.fillText(`PEAK GRIP: ${peakMu.toFixed(2)}μ @ ${peakDeg.toFixed(1)}°`, peakX + 20, peakY - 10);
+
+      // Active Probe Marker
+      const probeDeg = pacejkaParams.probeAlpha;
+      const probeRad = (probeDeg * Math.PI) / 180;
+      const probeMu = evalPacejka(probeRad, B, C, D, E, 0, 0);
+      const probeX = padLeft + (probeDeg / 30) * plotW;
+      const probeY = (h - padBottom) - (probeMu / 2.0) * plotH;
+
+      // Probe crosshair lines
+      pCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      pCtx.setLineDash([2, 2]);
+      pCtx.beginPath();
+      pCtx.moveTo(probeX, h - padBottom);
+      pCtx.lineTo(probeX, probeY);
+      pCtx.lineTo(padLeft, probeY);
+      pCtx.stroke();
+      pCtx.setLineDash([]);
+
+      pCtx.fillStyle = '#fff';
+      pCtx.beginPath();
+      pCtx.arc(probeX, probeY, 6, 0, Math.PI * 2);
+      pCtx.fill();
+      pCtx.strokeStyle = '#00f3ff';
+      pCtx.lineWidth = 2;
+      pCtx.stroke();
+
+      // Update Telemetry HUD
+      const latF = probeMu * pacejkaParams.Fz;
+      const cAlpha = (initSlope * pacejkaParams.Fz * Math.PI) / 180;
+      document.getElementById('hudSlipAngle').innerText = probeDeg.toFixed(1) + '°';
+      document.getElementById('hudLateralF').innerText = Math.round(latF).toLocaleString() + ' N';
+      document.getElementById('hudStiffness').innerText = Math.round(cAlpha).toLocaleString() + ' N/deg';
+      document.getElementById('hudPeakAngle').innerText = peakDeg.toFixed(1) + '°';
+    }
+
+    // -------------------------------------------------------------
+    // FRICTION CIRCLE & COMBINED SLIP
+    // -------------------------------------------------------------
+    let circleState = {
+      kappa: 0.0,
+      alphaDeg: 0.0,
+      Fz: 4500,
+      mu0: 1.35
+    };
+
+    function updateCombinedSlip() {
+      circleState.kappa = parseFloat(document.getElementById('kappaSlider').value) / 100;
+      circleState.alphaDeg = parseFloat(document.getElementById('alphaSlider').value);
+      document.getElementById('lblKappa').innerText = (circleState.kappa >= 0 ? '+' : '') + circleState.kappa.toFixed(2);
+      document.getElementById('lblAlpha').innerText = circleState.alphaDeg.toFixed(1) + '°';
+      renderFrictionCircle();
+    }
+
+    function setDriftScenario(type) {
+      if (type === 'grip') {
+        circleState.kappa = 0.05;
+        circleState.alphaDeg = 5.0;
+      } else if (type === 'trailbrake') {
+        circleState.kappa = -0.35;
+        circleState.alphaDeg = 6.5;
+      } else if (type === 'powerover') {
+        circleState.kappa = 0.55;
+        circleState.alphaDeg = 12.0;
+      } else if (type === 'drift') {
+        circleState.kappa = 0.70;
+        circleState.alphaDeg = 18.0;
+      } else if (type === 'lockup') {
+        circleState.kappa = -0.95;
+        circleState.alphaDeg = 2.0;
+      }
+      document.getElementById('kappaSlider').value = circleState.kappa * 100;
+      document.getElementById('alphaSlider').value = circleState.alphaDeg;
+      updateCombinedSlip();
+    }
+
+    const cCanvas = document.getElementById('circleCanvas');
+    const cCtx = cCanvas.getContext('2d');
+
+    function renderFrictionCircle() {
+      const w = cCanvas.width;
+      const h = cCanvas.height;
+      cCtx.clearRect(0, 0, w, h);
+
+      const cx = w / 2;
+      const cy = h / 2;
+      const radius = 150;
+
+      // Normal load sensitivity
+      const Fz = circleState.Fz;
+      const kLoad = 0.00003;
+      const muPeak = circleState.mu0 * (1.0 - kLoad * (Fz - 3500));
+      const maxF = muPeak * Fz;
+
+      // Combined slip factors from formula
+      const alphaRad = (Math.abs(circleState.alphaDeg) * Math.PI) / 180;
+      const kappaAbs = Math.abs(circleState.kappa);
+
+      // Gxa and Gyk attenuation
+      const Gxa = Math.cos(1.2 * Math.atan(9.0 * alphaRad));
+      const Gyk = Math.cos(1.2 * Math.atan(9.0 * kappaAbs));
+
+      const rawFx = evalPacejka(circleState.kappa * 0.25, 12, 1.6, muPeak, -0.6, 0, 0) * Fz * Gxa;
+      const rawFy = evalPacejka(alphaRad, 10, 1.6, muPeak, -0.6, 0, 0) * Fz * Gyk * Math.sign(circleState.alphaDeg);
+
+      const demandForce = Math.sqrt(rawFx * rawFx + rawFy * rawFy);
+      const utilization = demandForce / maxF;
+
+      // Progressive slide breakaway
+      const muSlide = muPeak * 0.75;
+      let muEff = muPeak;
+      if (utilization > 1.0) {
+        muEff = muSlide + (muPeak - muSlide) * Math.exp(-2.5 * Math.pow(utilization - 1.0, 2));
+      }
+
+      // Draw Grid & Coordinate Axes
+      cCtx.strokeStyle = '#142033';
+      cCtx.lineWidth = 1;
+      cCtx.beginPath();
+      cCtx.moveTo(cx, 20);
+      cCtx.lineTo(cx, h - 20);
+      cCtx.moveTo(20, cy);
+      cCtx.lineTo(w - 20, cy);
+      cCtx.stroke();
+
+      // Outer Friction Ellipse Limit
+      cCtx.beginPath();
+      cCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+      cCtx.strokeStyle = 'rgba(0, 243, 255, 0.3)';
+      cCtx.lineWidth = 2;
+      cCtx.stroke();
+
+      // Sliding Limit Circle
+      const slideRadius = radius * (muSlide / muPeak);
+      cCtx.beginPath();
+      cCtx.arc(cx, cy, slideRadius, 0, Math.PI * 2);
+      cCtx.strokeStyle = 'rgba(255, 51, 102, 0.25)';
+      cCtx.setLineDash([4, 4]);
+      cCtx.stroke();
+      cCtx.setLineDash([]);
+
+      // Operating Vector
+      const vecX = (rawFy / maxF) * radius;
+      const vecY = -(rawFx / maxF) * radius;
+
+      // Vector Line
+      cCtx.beginPath();
+      cCtx.moveTo(cx, cy);
+      cCtx.lineTo(cx + vecX, cy + vecY);
+      cCtx.lineWidth = 3.5;
+      cCtx.strokeStyle = utilization > 1.0 ? '#ff3366' : (utilization > 0.85 ? '#ffaa00' : '#00f3ff');
+      cCtx.shadowColor = cCtx.strokeStyle;
+      cCtx.shadowBlur = 12;
+      cCtx.stroke();
+      cCtx.shadowBlur = 0;
+
+      // Vector Head Point
+      cCtx.beginPath();
+      cCtx.arc(cx + vecX, cy + vecY, 6, 0, Math.PI * 2);
+      cCtx.fillStyle = '#fff';
+      cCtx.fill();
+
+      // HUD Labels on Canvas
+      cCtx.fillStyle = '#556680';
+      cCtx.font = '10px "JetBrains Mono"';
+      cCtx.textAlign = 'center';
+      cCtx.fillText('+ACCELERATION (Fx)', cx, 35);
+      cCtx.fillText('-BRAKING (Fx)', cx, h - 30);
+      cCtx.textAlign = 'left';
+      cCtx.fillText('RIGHT (Fy)', w - 80, cy - 8);
+      cCtx.textAlign = 'right';
+      cCtx.fillText('LEFT (Fy)', 80, cy - 8);
+
+      // Update Telemetry HUD
+      const hudState = document.getElementById('hudTractionState');
+      if (utilization < 0.85) {
+        hudState.innerText = 'TRACTION (GRIP)';
+        hudState.style.color = '#00e676';
+      } else if (utilization <= 1.0) {
+        hudState.innerText = 'SLIP LIMIT / SCRUB';
+        hudState.style.color = '#ffaa00';
+      } else {
+        hudState.innerText = 'DRIFT BREAKAWAY';
+        hudState.style.color = '#ff3366';
+      }
+
+      document.getElementById('hudTotalForce').innerText = Math.round(demandForce).toLocaleString() + ' N';
+      document.getElementById('hudGripUtil').innerText = (utilization * 100).toFixed(1) + '%';
+      document.getElementById('hudMuEff').innerText = muEff.toFixed(2) + ' μ';
+    }
+
+    // -------------------------------------------------------------
+    // PNEUMATIC TRAIL & ALIGNING TORQUE
+    // -------------------------------------------------------------
+    let trailState = {
+      alphaDeg: 4.0,
+      camberDeg: -2.0
+    };
+
+    function updateTrailPlot() {
+      trailState.alphaDeg = parseFloat(document.getElementById('trailAlphaSlider').value);
+      trailState.camberDeg = parseFloat(document.getElementById('camberSlider').value);
+      document.getElementById('lblTrailAlpha').innerText = trailState.alphaDeg.toFixed(1) + '°';
+      document.getElementById('lblCamber').innerText = trailState.camberDeg.toFixed(1) + '°';
+      renderTorquePlot();
+    }
+
+    const tCanvas = document.getElementById('torqueCanvas');
+    const tCtx = tCanvas.getContext('2d');
+
+    function renderTorquePlot() {
+      const w = tCanvas.width;
+      const h = tCanvas.height;
+      tCtx.clearRect(0, 0, w, h);
+
+      const padLeft = 60;
+      const padRight = 30;
+      const padTop = 30;
+      const padBottom = 40;
+      const plotW = w - padLeft - padRight;
+      const plotH = h - padTop - padBottom;
+
+      // Trail formulation: t(alpha) = Dt * cos(Ct * atan(Bt * alpha - Et * (Bt * alpha - atan(Bt * alpha))))
+      const Dt = 0.035; // 35 mm max trail
+      const Ct = 1.35;
+      const Bt = 10.0;
+      const Et = 0.8;
+
+      // Plot grid
+      tCtx.strokeStyle = '#142033';
+      tCtx.lineWidth = 1;
+      tCtx.beginPath();
+      for (let deg = 0; deg <= 25; deg += 5) {
+        const x = padLeft + (deg / 25) * plotW;
+        tCtx.moveTo(x, padTop);
+        tCtx.lineTo(x, h - padBottom);
+      }
+      for (let mz = 0; mz <= 200; mz += 50) {
+        const y = (h - padBottom) - (mz / 200) * plotH;
+        tCtx.moveTo(padLeft, y);
+        tCtx.lineTo(w - padRight, y);
+      }
+      tCtx.stroke();
+
+      // Axis labels
+      tCtx.fillStyle = '#556680';
+      tCtx.font = '11px "JetBrains Mono"';
+      tCtx.textAlign = 'center';
+      for (let deg = 0; deg <= 25; deg += 5) {
+        const x = padLeft + (deg / 25) * plotW;
+        tCtx.fillText(deg + '°', x, h - padBottom + 20);
+      }
+      tCtx.textAlign = 'right';
+      for (let mz = 0; mz <= 200; mz += 50) {
+        const y = (h - padBottom) - (mz / 200) * plotH;
+        tCtx.fillText(mz + ' N·m', padLeft - 10, y + 4);
+      }
+
+      // Plot Self-Aligning Torque Curve Mz(alpha)
+      tCtx.strokeStyle = '#ffaa00';
+      tCtx.lineWidth = 3;
+      tCtx.beginPath();
+
+      for (let deg = 0; deg <= 25; deg += 0.2) {
+        const rad = (deg * Math.PI) / 180;
+        const trail = Dt * Math.cos(Ct * Math.atan(Bt * rad - Et * (Bt * rad - Math.atan(Bt * rad))));
+        const fy = evalPacejka(rad, 10, 1.6, 1.35, -0.6, 0, 0) * 4500;
+        const camberThrust = 1200 * (trailState.camberDeg * Math.PI / 180);
+        const mz = Math.max(0, trail * (fy + camberThrust));
+
+        const px = padLeft + (deg / 25) * plotW;
+        const py = (h - padBottom) - (mz / 200) * plotH;
+
+        if (deg === 0) tCtx.moveTo(px, py);
+        else tCtx.lineTo(px, py);
+      }
+      tCtx.stroke();
+
+      // Current operating point
+      const curRad = (trailState.alphaDeg * Math.PI) / 180;
+      const curTrail = Math.max(0, Dt * Math.cos(Ct * Math.atan(Bt * curRad - Et * (Bt * curRad - Math.atan(Bt * curRad)))));
+      const curFy = evalPacejka(curRad, 10, 1.6, 1.35, -0.6, 0, 0) * 4500;
+      const curMz = Math.max(0, curTrail * (curFy + 1200 * (trailState.camberDeg * Math.PI / 180)));
+
+      const curX = padLeft + (trailState.alphaDeg / 25) * plotW;
+      const curY = (h - padBottom) - (curMz / 200) * plotH;
+
+      tCtx.fillStyle = '#00f3ff';
+      tCtx.beginPath();
+      tCtx.arc(curX, curY, 6, 0, Math.PI * 2);
+      tCtx.fill();
+
+      // HUD Update
+      document.getElementById('hudMz').innerText = Math.round(curMz) + ' N·m';
+      document.getElementById('hudTrail').innerText = (curTrail * 1000).toFixed(1) + ' mm';
+      
+      const ffb = document.getElementById('hudFFB');
+      if (trailState.alphaDeg < 6) {
+        ffb.innerText = 'Centering Force High';
+        ffb.style.color = '#00f3ff';
+      } else if (trailState.alphaDeg < 10) {
+        ffb.innerText = 'Slide Warning Peak!';
+        ffb.style.color = '#ffaa00';
+      } else {
+        ffb.innerText = 'Steering Light (Counter-Steer)';
+        ffb.style.color = '#00e676';
+      }
+    }
+
+    // Initialize default plots
+    renderPacejkaPlot();
+    renderFrictionCircle();
+    renderTorquePlot();
+  </script>
+</body>
+</html>

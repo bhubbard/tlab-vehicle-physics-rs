@@ -1,8 +1,11 @@
 # tlab-vehicle-physics-rs
 
 [![Crates.io](https://img.shields.io/badge/crates.io-v0.1.0-orange.svg)](https://crates.io/crates/tlab-vehicle-physics)
+[![GitHub Pages](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-brightgreen?logo=github)](https://bhubbard.github.io/tlab-vehicle-physics-rs/)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-2024%20edition-brightgreen.svg)](https://www.rust-lang.org)
+
+🔬 **[Explore the Live Interactive Pacejka Tire & Drift Physics Sandbox](https://bhubbard.github.io/tlab-vehicle-physics-rs/)**
 
 Pure Rust Pacejka 'Magic Formula' tire friction, combined slip, camber thrust, self-aligning torque ($M_z$), and drift physics translated from TLabAltoh's [`TLabVehiclePhysics`](https://github.com/TLabAltoh/TLabVehiclePhysics).
 
