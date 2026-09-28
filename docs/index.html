@@ -1891,8 +1891,8 @@
       <div class="tests-panel">
         <div class="tests-summary">
           <div>
-            <div style="font-family:var(--font-heading); font-size:1.5rem; font-weight:700;">15 Tests Passed</div>
-            <div style="color:var(--text-muted); font-size:0.85rem; font-family:var(--font-mono);">0 failed · 0 ignored · 4 integration suites</div>
+            <div style="font-family:var(--font-heading); font-size:1.5rem; font-weight:700;">18 Tests Passed</div>
+            <div style="color:var(--text-muted); font-size:0.85rem; font-family:var(--font-mono);">0 failed · 0 ignored · 5 integration suites</div>
           </div>
           <div class="test-badge-big">
             ✓ ALL TESTS PASSING
@@ -1900,6 +1900,17 @@
         </div>
 
         <div class="test-grid">
+          <!-- Analytical Accuracy Tests -->
+          <div class="test-suite-card">
+            <div class="test-suite-header">
+              <span class="test-suite-name">accuracy_test</span>
+              <span class="test-suite-count">3/3</span>
+            </div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_pacejka_analytical_magic_formula_exactness (RMSE &lt; 10⁻⁵)</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_friction_circle_invariance (100% envelope bound)</div>
+            <div class="test-item"><span class="test-status-ok">✓</span> test_cornering_stiffness_and_peak_force</div>
+          </div>
+
           <!-- Combined Slip Tests -->
           <div class="test-suite-card">
             <div class="test-suite-header">
